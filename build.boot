@@ -74,7 +74,7 @@
    (speak)
    (hoplon)
    (reload)
-   (cljs)
+   (cljs :source-map true :compiler-options {:parallel-build true})
    (serve :port 8000)))
 
 (deftask prod
@@ -83,5 +83,6 @@
   (comp
    (gen-cljs-dict-task)
    (hoplon)
-   (cljs :optimizations :advanced)
+   (cljs :optimizations :advanced
+         :compiler-options {:parallel-build true})
    (target :dir #{"target"})))

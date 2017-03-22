@@ -1,8 +1,29 @@
 body {
-    margin: 0;
-    padding: 20px;
+    font-family: sans-serif;
+    color: #444;
 }
 
-h1 {
-    color: blue;
+table.tray {
+    width: 200px;
+    height: 200px;
+    border-collapse: collapse;
+    border-style: hidden;
+    text-align: center;
+    border: 1px solid black;
+}
+
+table.tray td, table.tray th {
+    border: 1px solid black;
+}
+
+.good {
+    background-color: #9e9;
+}
+
+.bad {
+    background-color: #ffb6c1;
+}
+
+button {
+    margin: 5 1px;
 }

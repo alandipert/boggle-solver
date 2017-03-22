@@ -1,6 +1,7 @@
 (page "index.html"
   (:require [clojure.pprint :as pp]
             [clojure.set :as set]
+            [clojure.string :as string]
             [boggle-solver.trie :as trie]
             [boggle-solver.dict :refer [twl06-trie]]))
 
@@ -74,29 +75,90 @@
     found))
 
 (defn search-tray
+  "Searches tray for words using dict and returns a set of words found."
   [dict tray]
   (->> (for [y (range 4) x (range 4)] [(make-node [[y x]])])
        (map (partial search dict tray #{}))
        (reduce set/union)))
 
-(def test-tray
-  [["qu" "f" "o" "o"]
-   ["x"  "e" "s" "b"]
-   ["b"  "a" "t" "i"]
-   ["u"  "r" "h" "j"]])
+(def blank-tray
+  [[nil nil nil nil]
+   [nil nil nil nil]
+   [nil nil nil nil]
+   [nil nil nil nil]])
 
-;;(pp/pprint (search twl06-trie test-tray #{} [(make-node [[0 1]])]))
-(pp/pprint (search-tray twl06-trie test-tray))
+(def input-tray (cell blank-tray))
 
-;; (pp/pprint (search-tray twl06-trie test-tray))
+(defn set-input!
+  [point v]
+  (swap! input-tray assoc-in point (string/lower-case v)))
 
-;; (pp/pprint ())
-;; (pp/pprint (let [solution (->> (search-tray twl06-trie test-tray)
-;;                                (sort-by (comp count :word)))]
-;;              [(count solution) solution]))
+(def valid-tokens
+  (->> "abcdefghijklmnoprstuvwxyz"
+       (map str)
+       (cons "qu")
+       set))
+
+(defn token-valid?
+  [t]
+  (contains? valid-tokens t))
+
+(def input-valid?
+  (cell= (every? token-valid? (flatten input-tray))))
+
+(def input-empty?
+  (cell= (some identity (flatten input-tray))))
+
+(def solution (cell nil))
+
+(def hovering-path (cell nil))
 
 (html
   (head
     (link :href "app.css" :rel "stylesheet" :type "text/css"))
   (body
-    (h1 "Hello, Hoplon!")))
+    (h1 "Boggle Solver")
+    (div :id "container"
+      (if-tpl (cell= (not solution))
+        (div :id "editor-container"
+          (h3 "Enter your puzzle to begin.")
+          (table :id "editor" :class "tray"
+            (for [y (range 4)]
+              (tr
+                (for [x (range 4)]
+                  (td :class (cell= {:good (token-valid? (get-in input-tray [y x]))
+                                      :bad (not (token-valid? (get-in input-tray [y x])))})
+                    (input
+                      :value (cell= (get-in input-tray [y x]))
+                      :keyup #(set-input! [y x] @%)
+                      :blur #(set-input! [y x] @%)
+                      :type "text"
+                      :size 2))))))
+          (div :id "editor-controls"
+            (button :disabled (cell= (not input-valid?))
+              :click #(reset! solution (search-tray twl06-trie @input-tray))
+              "Solve")
+            (button :disabled (cell= (not input-empty?))
+              :click #(reset! input-tray blank-tray)
+              "Clear"))
+          (div :id "editor-errors" :toggle (cell= (not input-valid?))
+            (p "One or more letters are invalid. Valid letters are a-z except q, and qu.")))
+
+        (div :id "solution-container"
+          (table :id "viewer" :class "tray"
+            (for [y (range 4)]
+              (tr
+                (for [x (range 4)]
+                  (td :css {:width "25%"}
+                    :class (cell= {:good (contains? hovering-path [y x])})
+                    (cell= (get-in input-tray [y x])))))))
+          (p (text "~(count solution) words found. Here they are in order from longest to shortest. Hover over one to see it on the board."))
+          (p (button :click #(reset! solution nil) "Reset"))
+          (ul
+            (for-tpl [s (cell= (reverse (sort-by (comp count :word) solution)))]
+              (cell-let [{:keys [word path]} s]
+                (li
+                  :css {:cursor "pointer"}
+                  :mouseenter #(reset! hovering-path (set @path))
+                  :mouseleave #(reset! hovering-path nil)
+                  (text "~{word} (~(count word))"))))))))))

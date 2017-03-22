@@ -1,34 +1,38 @@
 (page "index.html"
   (:require [clojure.pprint :as pp]
             [clojure.set :as set]
+            [boggle-solver.trie :as trie]
             [boggle-solver.dict :refer [twl06-trie]]))
-
-(defn partial-word?
-  "True when the tokens form part of a word in dict, but not an entire word."
-  [dict tokens]
-  (when-let [x (get-in dict tokens)]
-    (not (:terminal x))))
 
 (defn word
   "Returns the word given by tokens, if it exists in dict. Otherwise returns
   nil."
   [dict tokens]
-  (when-let [node (get-in dict tokens)]
-    (when (:terminal node)
-      (apply str (:val node)))))
+  (when (trie/in-trie? dict tokens)
+    (apply str tokens)))
+
+(defn partial-word?
+  "True when the tokens form part of a word in dict."
+  [dict tokens]
+  (seq (trie/prefix-matches dict tokens)))
 
 (defn neighbors
   "Returns a sequence of the points adjacent to point on the tray. Based on code
   by Christophe Grand:
   http://web.archive.org/web/20160623055257/http://clj-me.cgrand.net/2011/08/19/conways-game-of-life/"
-  [[x y :as point]]
-  (->> (for [dx [-1 0 1]
-             dy (if (zero? dx) [-1 1] [-1 0 1])]
-         [(+ dx x) (+ dy y)])
+  [[y x :as point]]
+  (->> (for [dy [-1 0 1]
+             dx (if (zero? dy) [-1 1] [-1 0 1])]
+         [(+ dy y) (+ dx x)])
        ;; Ensure the neighboring points are on the tray.
        (filter (partial every? #(and (>= % 0) (< % 4))))))
 
-(defn next-paths
+(defn path->tokens
+  "Converts a path to a sequence of tokens based on tray."
+  [tray path]
+  (map #(get-in tray %) path))
+
+(defn children
   "Returns a sequence of paths starting from path, a vector of points, if any
   exist."
   [path]
@@ -37,33 +41,41 @@
        (filter (complement (set path)))
        (map (partial conj path))))
 
-(defn path->tokens
-  "Converts a path to a sequence of tokens based on tray."
-  [tray path]
-  (map #(get-in tray %) path))
+(defn make-node
+  [path]
+  {:path   path
+   :kids   (children path)})
 
 (defn search
-  [dict tray found [path & paths]]
-  (if path
-    (let [tokens (path->tokens tray path)]
-      (cond
-        ;; If the tokens constitute a partial match then continue the search to
-        ;; neighboring paths.
-        (partial-word? dict tokens)
-        (recur dict tray found (into paths (next-paths path)))
-
-        ;; If we found a word, save it.
-        (word dict tokens)
-        (recur dict tray (conj found {:word (word dict tokens) :path path}) paths)
-
-        ;; Otherwise, continue searching paths.
-        :else
-        (recur dict tray found paths)))
+  "Non-recursive backtracking search of the puzzle given by tray. Based on
+  algorithm described on
+  https://www.cis.upenn.edu/~matuszek/cit594-2012/Pages/backtracking.html"
+  [dict tray found stack]
+  (if-let [node (peek stack)]
+    (let [{:keys [path kids]} node
+          tokens              (path->tokens tray path)]
+      (if-let [new-word (word dict tokens)]
+        (recur dict
+               tray
+               (conj found {:word new-word
+                            :path path})
+               (into (pop stack)
+                     (if (partial-word? dict tokens)
+                       (map make-node kids))))
+        (if (and (seq kids)
+                 (partial-word? dict tokens))
+          (recur dict
+                 tray
+                 found
+                 (conj (pop stack)
+                       (update node :kids next)
+                       (make-node (first kids))))
+          (recur dict tray found (pop stack)))))
     found))
 
 (defn search-tray
   [dict tray]
-  (->> (for [x (range 4) y (range 4)] [[[x y]]])
+  (->> (for [y (range 4) x (range 4)] [(make-node [[y x]])])
        (map (partial search dict tray #{}))
        (reduce set/union)))
 
@@ -73,9 +85,15 @@
    ["b"  "a" "t" "i"]
    ["u"  "r" "h" "j"]])
 
-(pp/pprint (->> (search-tray twl06-trie test-tray)
-                (sort-by (comp count :word))
-                time))
+;;(pp/pprint (search twl06-trie test-tray #{} [(make-node [[0 1]])]))
+(pp/pprint (search-tray twl06-trie test-tray))
+
+;; (pp/pprint (search-tray twl06-trie test-tray))
+
+;; (pp/pprint ())
+;; (pp/pprint (let [solution (->> (search-tray twl06-trie test-tray)
+;;                                (sort-by (comp count :word)))]
+;;              [(count solution) solution]))
 
 (html
   (head

@@ -1,0 +1,84 @@
+(page "index.html"
+  (:require [clojure.pprint :as pp]
+            [clojure.set :as set]
+            [boggle-solver.dict :refer [twl06-trie]]))
+
+(defn partial-word?
+  "True when the tokens form part of a word in dict, but not an entire word."
+  [dict tokens]
+  (when-let [x (get-in dict tokens)]
+    (not (:terminal x))))
+
+(defn word
+  "Returns the word given by tokens, if it exists in dict. Otherwise returns
+  nil."
+  [dict tokens]
+  (when-let [node (get-in dict tokens)]
+    (when (:terminal node)
+      (apply str (:val node)))))
+
+(defn neighbors
+  "Returns a sequence of the points adjacent to point on the tray. Based on code
+  by Christophe Grand:
+  http://web.archive.org/web/20160623055257/http://clj-me.cgrand.net/2011/08/19/conways-game-of-life/"
+  [[x y :as point]]
+  (->> (for [dx [-1 0 1]
+             dy (if (zero? dx) [-1 1] [-1 0 1])]
+         [(+ dx x) (+ dy y)])
+       ;; Ensure the neighboring points are on the tray.
+       (filter (partial every? #(and (>= % 0) (< % 4))))))
+
+(defn next-paths
+  "Returns a sequence of paths starting from path, a vector of points, if any
+  exist."
+  [path]
+  (->> (peek path)
+       neighbors
+       (filter (complement (set path)))
+       (map (partial conj path))))
+
+(defn path->tokens
+  "Converts a path to a sequence of tokens based on tray."
+  [tray path]
+  (map #(get-in tray %) path))
+
+(defn search
+  [dict tray found [path & paths]]
+  (if path
+    (let [tokens (path->tokens tray path)]
+      (cond
+        ;; If the tokens constitute a partial match then continue the search to
+        ;; neighboring paths.
+        (partial-word? dict tokens)
+        (recur dict tray found (into paths (next-paths path)))
+
+        ;; If we found a word, save it.
+        (word dict tokens)
+        (recur dict tray (conj found {:word (word dict tokens) :path path}) paths)
+
+        ;; Otherwise, continue searching paths.
+        :else
+        (recur dict tray found paths)))
+    found))
+
+(defn search-tray
+  [dict tray]
+  (->> (for [x (range 4) y (range 4)] [[[x y]]])
+       (map (partial search dict tray #{}))
+       (reduce set/union)))
+
+(def test-tray
+  [["qu" "f" "o" "o"]
+   ["x"  "e" "s" "b"]
+   ["b"  "a" "t" "i"]
+   ["u"  "r" "h" "j"]])
+
+(pp/pprint (->> (search-tray twl06-trie test-tray)
+                (sort-by (comp count :word))
+                time))
+
+(html
+  (head
+    (link :href "app.css" :rel "stylesheet" :type "text/css"))
+  (body
+    (h1 "Hello, Hoplon!")))

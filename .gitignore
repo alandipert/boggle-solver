@@ -1,4 +1,4 @@
 /.boot
 /target
-/.nrepl-*
+.nrepl-*
 /.repl-history

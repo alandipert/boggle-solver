@@ -34,6 +34,11 @@
         [nil []])
        second))
 
+(defn gen-trie
+  [num-skip dict-file]
+  (with-open [rdr (io/reader dict-file)]
+    (trie/build-trie (map tokenize (drop num-skip (line-seq rdr))))))
+
 (defn gen-trie*
   [num-skip dict-file ns-sym var-sym out-file]
   (with-open [rdr (io/reader dict-file)
